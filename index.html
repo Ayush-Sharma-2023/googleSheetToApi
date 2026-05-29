@@ -3,265 +3,188 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Secure Vault</title>
+<title>Google Sheet to API Converter</title>
 
 <style>
-body{
+*{
+    box-sizing:border-box;
+    margin:0;
+    padding:0;
     font-family:Arial,sans-serif;
-    max-width:900px;
-    margin:40px auto;
+}
+
+body{
+    background:#f3f4f6;
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
     padding:20px;
-    background:#f5f5f5;
 }
 
-h2{
-    margin-top:30px;
+.container{
+    background:white;
+    width:100%;
+    max-width:700px;
+    padding:30px;
+    border-radius:12px;
+    box-shadow:0 10px 25px rgba(0,0,0,.1);
 }
 
-textarea,input{
+h1{
+    margin-bottom:20px;
+    text-align:center;
+}
+
+label{
+    display:block;
+    margin-top:15px;
+    margin-bottom:6px;
+    font-weight:bold;
+}
+
+input{
     width:100%;
     padding:12px;
-    margin:10px 0;
     border:1px solid #ccc;
     border-radius:8px;
-    box-sizing:border-box;
+    font-size:14px;
 }
 
 button{
-    padding:10px 20px;
     border:none;
+    padding:12px 18px;
     border-radius:8px;
     cursor:pointer;
-    background:#2563eb;
-    color:white;
-    margin-right:10px;
+    font-size:14px;
 }
 
-button:hover{
-    opacity:.9;
+.generate{
+    width:100%;
+    margin-top:20px;
+    background:#2563eb;
+    color:white;
+}
+
+.generate:hover{
+    background:#1d4ed8;
+}
+
+.output-box{
+    margin-top:20px;
 }
 
 .output{
-    background:white;
+    background:#f8fafc;
+    border:1px solid #ddd;
     padding:12px;
     border-radius:8px;
-    border:1px solid #ddd;
-    min-height:60px;
     word-break:break-all;
+    min-height:50px;
+}
+
+.copy-btn{
+    margin-top:10px;
+    background:#16a34a;
+    color:white;
+}
+
+.copy-btn:hover{
+    background:#15803d;
+}
+
+.success{
+    margin-top:10px;
+    color:#16a34a;
+    font-weight:bold;
 }
 </style>
 </head>
 <body>
 
-<h1>🔐 Secure Vault</h1>
+<div class="container">
 
-<h2>Encrypt</h2>
+    <h1>Google Sheet → API URL</h1>
 
-<input
-id="encryptPassword"
-type="text"
-placeholder="Enter Password"
-/>
+    <label>Google Sheet Link</label>
+    <input
+        type="text"
+        id="sheetLink"
+        placeholder="Paste Google Sheet URL here"
+    >
 
-<textarea
-id="plainText"
-rows="6"
-placeholder="Enter secret text..."
-></textarea>
+    <label>Sheet Name</label>
+    <input
+        type="text"
+        id="sheetName"
+        placeholder="Example: Sheet1"
+    >
 
-<button onclick="encryptText()">Encrypt</button>
+    <button class="generate" onclick="generateApi()">
+        Generate API URL
+    </button>
 
-<div id="encryptedOutput" class="output"></div>
-<br>
-<button onclick="copyText('encryptedOutput')">
-    Copy Encrypted Text
-</button>
+    <div class="output-box">
+        <label>API URL</label>
 
-<h2>Decrypt</h2>
+        <div class="output" id="output">
+            Your API URL will appear here...
+        </div>
 
-<input
-id="decryptPassword"
-type="text"
-placeholder="Enter Password"
-/>
+        <button class="copy-btn" onclick="copyUrl()">
+            Copy URL
+        </button>
 
-<textarea
-id="encryptedInput"
-rows="6"
-placeholder="Paste encrypted text..."
-></textarea>
+        <div class="success" id="message"></div>
+    </div>
 
-<button onclick="decryptText()">Decrypt</button>
-
-<div id="decryptedOutput" class="output"></div>
-<br>
-<button onclick="copyText('decryptedOutput')">
-    Copy Decrypted Text
-</button>
+</div>
 
 <script>
+function generateApi() {
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-function copyText(elementId){
+    const link =
+        document.getElementById("sheetLink").value.trim();
 
-    const text =
-        document.getElementById(elementId).textContent;
+    const sheetName =
+        document.getElementById("sheetName").value.trim();
 
-    navigator.clipboard.writeText(text)
-        .then(() => {
-            alert("Copied!");
-        })
-        .catch(err => {
-            console.error(err);
-            alert("Copy failed");
-        });
-}
-function arrayBufferToBase64(buffer){
-    return btoa(String.fromCharCode(...new Uint8Array(buffer)));
-}
+    const match = link.match(/\/d\/([a-zA-Z0-9-_]+)/);
 
-function base64ToArrayBuffer(base64){
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-
-    for(let i=0;i<binary.length;i++){
-        bytes[i] = binary.charCodeAt(i);
+    if (!match) {
+        document.getElementById("output").textContent =
+            "Invalid Google Sheet URL";
+        return;
     }
 
-    return bytes.buffer;
+    const sheetId = match[1];
+
+    const apiUrl =
+        `https://opensheet.elk.sh/${sheetId}/${encodeURIComponent(sheetName)}`;
+
+    document.getElementById("output").textContent = apiUrl;
+
+    document.getElementById("message").textContent = "";
 }
 
-async function deriveKey(password, salt){
+function copyUrl() {
 
-    const passwordKey = await crypto.subtle.importKey(
-        "raw",
-        encoder.encode(password),
-        "PBKDF2",
-        false,
-        ["deriveKey"]
-    );
+    const url =
+        document.getElementById("output").textContent;
 
-    return crypto.subtle.deriveKey(
-        {
-            name:"PBKDF2",
-            salt:salt,
-            iterations:100000,
-            hash:"SHA-256"
-        },
-        passwordKey,
-        {
-            name:"AES-GCM",
-            length:256
-        },
-        false,
-        ["encrypt","decrypt"]
-    );
-}
-
-async function encryptText(){
-
-    try{
-
-        const password =
-            document.getElementById("encryptPassword").value;
-
-        const text =
-            document.getElementById("plainText").value;
-
-        if(!password || !text){
-            alert("Enter password and text");
-            return;
-        }
-
-        const salt = crypto.getRandomValues(
-            new Uint8Array(16)
-        );
-
-        const iv = crypto.getRandomValues(
-            new Uint8Array(12)
-        );
-
-        const key = await deriveKey(password,salt);
-
-        const encrypted = await crypto.subtle.encrypt(
-            {
-                name:"AES-GCM",
-                iv:iv
-            },
-            key,
-            encoder.encode(text)
-        );
-
-        const result = JSON.stringify({
-            salt:arrayBufferToBase64(salt),
-            iv:arrayBufferToBase64(iv),
-            data:arrayBufferToBase64(encrypted)
-        });
-
-        document.getElementById(
-            "encryptedOutput"
-        ).textContent = result;
-
-    }catch(err){
-        alert("Encryption failed");
-        console.error(err);
+    if (
+        !url ||
+        url === "Your API URL will appear here..." ||
+        url === "Invalid Google Sheet URL"
+    ) {
+        return;
     }
+
+    navigator.clipboard.writeText(url);
+
+    document.getElementById("message").textContent =
+        "✅ API URL copied!";
 }
-
-async function decryptText(){
-
-    try{
-
-        const password =
-            document.getElementById("decryptPassword").value;
-
-        const encryptedInput =
-            document.getElementById("encryptedInput").value;
-
-        const payload = JSON.parse(encryptedInput);
-
-        const salt =
-            new Uint8Array(
-                base64ToArrayBuffer(payload.salt)
-            );
-
-        const iv =
-            new Uint8Array(
-                base64ToArrayBuffer(payload.iv)
-            );
-
-        const data =
-            base64ToArrayBuffer(payload.data);
-
-        const key =
-            await deriveKey(password,salt);
-
-        const decrypted =
-            await crypto.subtle.decrypt(
-                {
-                    name:"AES-GCM",
-                    iv:iv
-                },
-                key,
-                data
-            );
-
-        document.getElementById(
-            "decryptedOutput"
-        ).textContent =
-            decoder.decode(decrypted);
-
-    }catch(err){
-
-        document.getElementById(
-            "decryptedOutput"
-        ).textContent =
-            "Wrong password or corrupted data";
-
-    }
-}
-
 </script>
 
 </body>
