@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secure Vault</title>
+
+<style>
+body{
+    font-family:Arial,sans-serif;
+    max-width:900px;
+    margin:40px auto;
+    padding:20px;
+    background:#f5f5f5;
+}
+
+h2{
+    margin-top:30px;
+}
+
+textarea,input{
+    width:100%;
+    padding:12px;
+    margin:10px 0;
+    border:1px solid #ccc;
+    border-radius:8px;
+    box-sizing:border-box;
+}
+
+button{
+    padding:10px 20px;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+    background:#2563eb;
+    color:white;
+    margin-right:10px;
+}
+
+button:hover{
+    opacity:.9;
+}
+
+.output{
+    background:white;
+    padding:12px;
+    border-radius:8px;
+    border:1px solid #ddd;
+    min-height:60px;
+    word-break:break-all;
+}
+</style>
+</head>
+<body>
+
+<h1>🔐 Secure Vault</h1>
+
+<h2>Encrypt</h2>
+
+<input
+id="encryptPassword"
+type="text"
+placeholder="Enter Password"
+/>
+
+<textarea
+id="plainText"
+rows="6"
+placeholder="Enter secret text..."
+></textarea>
+
+<button onclick="encryptText()">Encrypt</button>
+
+<div id="encryptedOutput" class="output"></div>
+<br>
+<button onclick="copyText('encryptedOutput')">
+    Copy Encrypted Text
+</button>
+
+<h2>Decrypt</h2>
+
+<input
+id="decryptPassword"
+type="text"
+placeholder="Enter Password"
+/>
+
+<textarea
+id="encryptedInput"
+rows="6"
+placeholder="Paste encrypted text..."
+></textarea>
+
+<button onclick="decryptText()">Decrypt</button>
+
+<div id="decryptedOutput" class="output"></div>
+<br>
+<button onclick="copyText('decryptedOutput')">
+    Copy Decrypted Text
+</button>
+
+<script>
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+function copyText(elementId){
+
+    const text =
+        document.getElementById(elementId).textContent;
+
+    navigator.clipboard.writeText(text)
+        .then(() => {
+            alert("Copied!");
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Copy failed");
+        });
+}
+function arrayBufferToBase64(buffer){
+    return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+}
+
+function base64ToArrayBuffer(base64){
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+
+    for(let i=0;i<binary.length;i++){
+        bytes[i] = binary.charCodeAt(i);
+    }
+
+    return bytes.buffer;
+}
+
+async function deriveKey(password, salt){
+
+    const passwordKey = await crypto.subtle.importKey(
+        "raw",
+        encoder.encode(password),
+        "PBKDF2",
+        false,
+        ["deriveKey"]
+    );
+
+    return crypto.subtle.deriveKey(
+        {
+            name:"PBKDF2",
+            salt:salt,
+            iterations:100000,
+            hash:"SHA-256"
+        },
+        passwordKey,
+        {
+            name:"AES-GCM",
+            length:256
+        },
+        false,
+        ["encrypt","decrypt"]
+    );
+}
+
+async function encryptText(){
+
+    try{
+
+        const password =
+            document.getElementById("encryptPassword").value;
+
+        const text =
+            document.getElementById("plainText").value;
+
+        if(!password || !text){
+            alert("Enter password and text");
+            return;
+        }
+
+        const salt = crypto.getRandomValues(
+            new Uint8Array(16)
+        );
+
+        const iv = crypto.getRandomValues(
+            new Uint8Array(12)
+        );
+
+        const key = await deriveKey(password,salt);
+
+        const encrypted = await crypto.subtle.encrypt(
+            {
+                name:"AES-GCM",
+                iv:iv
+            },
+            key,
+            encoder.encode(text)
+        );
+
+        const result = JSON.stringify({
+            salt:arrayBufferToBase64(salt),
+            iv:arrayBufferToBase64(iv),
+            data:arrayBufferToBase64(encrypted)
+        });
+
+        document.getElementById(
+            "encryptedOutput"
+        ).textContent = result;
+
+    }catch(err){
+        alert("Encryption failed");
+        console.error(err);
+    }
+}
+
+async function decryptText(){
+
+    try{
+
+        const password =
+            document.getElementById("decryptPassword").value;
+
+        const encryptedInput =
+            document.getElementById("encryptedInput").value;
+
+        const payload = JSON.parse(encryptedInput);
+
+        const salt =
+            new Uint8Array(
+                base64ToArrayBuffer(payload.salt)
+            );
+
+        const iv =
+            new Uint8Array(
+                base64ToArrayBuffer(payload.iv)
+            );
+
+        const data =
+            base64ToArrayBuffer(payload.data);
+
+        const key =
+            await deriveKey(password,salt);
+
+        const decrypted =
+            await crypto.subtle.decrypt(
+                {
+                    name:"AES-GCM",
+                    iv:iv
+                },
+                key,
+                data
+            );
+
+        document.getElementById(
+            "decryptedOutput"
+        ).textContent =
+            decoder.decode(decrypted);
+
+    }catch(err){
+
+        document.getElementById(
+            "decryptedOutput"
+        ).textContent =
+            "Wrong password or corrupted data";
+
+    }
+}
+
+</script>
+
+</body>
+</html>
